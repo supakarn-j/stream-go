@@ -4,7 +4,7 @@ import (
 	"context"
 	"time"
 
-	"gitlab.com/hannlync/backend/stream-go"
+	"gitlab.com/hannlync/backend/stream-go.git"
 )
 
 func main() {

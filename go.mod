@@ -1,4 +1,4 @@
-module gitlab.com/hannlync/backend/stream-go
+module gitlab.com/hannlync/backend/stream-go.git
 
 go 1.25.6
 
