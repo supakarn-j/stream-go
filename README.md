@@ -20,7 +20,7 @@ password <your gitlab personal access token>
 ```
 3. install package
 ```
-go get gitlab.com/hannlync/backend/stream-go@v0.1.0
+go get gitlab.com/hannlync/backend/stream-go.git@v0.1.0
 ```
 
 ## Example
