@@ -1,0 +1,18 @@
+services:
+  redis: 
+    container_name: redis
+    image: docker.io/library/redis:8.6.1
+    ports: 
+    - "6379:6379"
+    environment:
+      REDIS_ARGS: "--appendonly yes --appendfsync always"
+    volumes:
+      - ./data:/data
+  redis-insight:
+    container_name: redis-insight
+    image: docker.io/redis/redisinsight
+    ports: 
+    - "13333:5540"
+    environment: 
+      RI_REDIS_HOST: redis
+      RI_REDIS_PORT: 6379
