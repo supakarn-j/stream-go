@@ -7,6 +7,22 @@ Go library for pushing/reading event to/from redis stream
 Redis >= 8.4.x
 ```
 
+## Installation
+1. Set GOPRIVATE
+```
+go env -w GOPRIVATE=gitlab.com/hannlync/*
+```
+2. Create `.netrc` file in project folder with following content.
+```
+machine gitlab.com
+login <your gitlab username>
+password <your gitlab personal access token>
+```
+3. install package
+```
+go get gitlab.com/hannlync/backend/stream-go@0.1.0
+```
+
 ## Example
 ### Producer
 ```go
