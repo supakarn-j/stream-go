@@ -33,18 +33,18 @@ func main() {
 			if consumerName == "" {
 				fmt.Println("Consumer name is required. Use --name or -n flag to specify the name")
 			}
-			conn := stream.NewRedisClient(stream.ConnectionConfig{
-				Addr:     fmt.Sprintf("%s:%s", host, port),
-				Password: password,
-			})
 
-			defer conn.Close()
-
-			consumer, err := stream.NewConsumer(conn, stream.ConsumerConfig{
+			consumer, err := stream.NewConsumer(stream.ConsumerConfig{
+				RedisConfig: stream.RedisConfig{
+					Addr:     fmt.Sprintf("%s:%s", host, port),
+					Password: password,
+				},
 				Stream: streamName,
 				Group:  group,
 				Name:   consumerName,
 			})
+
+			defer consumer.Close()
 
 			if err != nil {
 				panic(err)
@@ -55,7 +55,7 @@ func main() {
 
 			for event := range events {
 				log.Printf("Received event at %s: %v", time.Now().String(), event)
-				consumer.Ack(ctx, event.ID)
+				event.Ack(ctx)
 			}
 		},
 	}

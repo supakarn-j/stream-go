@@ -24,7 +24,7 @@ func TestClientConnect(t *testing.T) {
 				}()
 			}
 			got := NewRedisClient(
-				ConnectionConfig{
+				RedisConfig{
 					Addr:     tt.addr,
 					Password: tt.password,
 				})

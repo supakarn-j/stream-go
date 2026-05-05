@@ -16,7 +16,7 @@ type Client interface {
 	Ack(ctx context.Context, stream, group string, ids ...string) error
 }
 
-type ConnectionConfig struct {
+type RedisConfig struct {
 	Addr     string
 	Password string
 	DB       int
@@ -26,7 +26,7 @@ type RedisClient struct {
 	client *redis.Client
 }
 
-func NewRedisClient(conn ConnectionConfig) *RedisClient {
+func NewRedisClient(conn RedisConfig) *RedisClient {
 	options := &redis.Options{
 		Addr:     conn.Addr,
 		Password: conn.Password,
@@ -91,6 +91,9 @@ func (r *RedisClient) Read(ctx context.Context, streamName, group, consunerName 
 			messages = append(messages, Message{
 				ID:     msg.ID,
 				Values: msg.Values,
+				ackFunc: func(ctx context.Context, id string) {
+					r.client.XAck(ctx, streamName, group, id)
+				},
 			})
 		}
 	}

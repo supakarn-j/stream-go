@@ -17,6 +17,7 @@ type Producer struct {
 }
 
 type ProducerConfig struct {
+	RedisConfig
 	Name   string // Required: Stream name
 	MaxLen int64  // Optional: Maximum stream length, default is 1000
 }
@@ -33,19 +34,26 @@ func (pc *ProducerConfig) validate() error {
 	return nil
 }
 
-func NewProducer(conn Client, config ProducerConfig) (*Producer, error) {
+// func NewProducer(conn Client, config ProducerConfig) (*Producer, error) {
+func NewProducer(config ProducerConfig) (*Producer, error) {
 	if err := config.validate(); err != nil {
 		return nil, err
 	}
 
+	client := NewRedisClient(config.RedisConfig)
+
 	producer := &Producer{
-		client:     conn,
+		client:     client,
 		streamName: config.Name,
 		maxLen:     config.MaxLen,
 		logger:     newDefaultLogger(),
 	}
 
 	return producer, nil
+}
+
+func (p *Producer) Close() {
+	p.client.Close()
 }
 
 func (p *Producer) Push(ctx context.Context, message map[string]interface{}) error {
