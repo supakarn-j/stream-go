@@ -31,27 +31,27 @@ import (
     "context"
 )
 
-conn := stream.NewRedisClient(
-    ConnectionConfig{
-        Addr:     "localhost:6379",
-        Password: "",
-        DB: 0,
-        }
-    )
+func main() {
+	producer, err := stream.NewProducer(stream.ProducerConfig{
+		RedisConfig: stream.RedisConfig{
+			Addr:     "localhost:6379",
+			Password: "",
+			DB: 0,
+		},
+		Name: "mystream"
+		})
+	defer producer.Close()
+	
+	ctx := context.Backgroud()
+	prooducer.Push(
+		ctx, 
+		map[string]interface{}{
+			"key1": "value1",
+			...
+		},
+	)
+}
 
-producer, err := stream.NewProducer(
-    conn, 
-    stream.ProducerConfig{Name: "mystream"},
-)
-
-ctx := context.Backgroud()
-prooducer.Push(
-    ctx, 
-    map[string]interface{}{
-        "key1": "value1",
-        ...
-    },
-    )
 ```
 
 ### Consumer 
@@ -66,21 +66,18 @@ import (
 )
 
 func main() {
-	conn := stream.NewRedisClient(stream.ConnectionConfig{
-		Addr: "localhost:6379",
-		Password: "",
-		DB: 0,
-	})
-
-	defer conn.Close()
-
-	consumer, err := stream.NewConsumer(conn, stream.ConsumerConfig{
+	consumer, err := stream.NewConsumer(stream.ConsumerConfig{
+		RedisConfig: stream.RedisConfig{
+			Addr: "localhost:6379",
+			Password: "",
+			DB: 0,
+		},
 		Stream:  "mystream",
 		Group:   "test-group",
 		Name:    "consumer-1",
 		RetryIn: 1 * time.Minute,
 	})
-
+	defer consumer.Close()
 
 	if err != nil {
 		panic(err)
@@ -93,7 +90,7 @@ func main() {
 		// Start processing event
 		log.Printf("Received event at %s: %v", time.Now().String(), event)
 		// processing done
-		consumer.Ack(ctx, event.ID)
+		event.Ack(ctx)
 	}
 
 }
