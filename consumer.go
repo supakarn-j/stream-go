@@ -70,6 +70,7 @@ func NewConsumer(conf ConsumerConfig) (*Consumer, error) {
 		group:   conf.Group,
 		name:    conf.Name,
 		retryIn: conf.RetryIn,
+		logger:  newDefaultLogger(),
 	}, nil
 }
 
