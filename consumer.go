@@ -51,27 +51,42 @@ func (cc *ConsumerConfig) validate() error {
 		return ErrEmptyConsumerName
 	}
 
-	if cc.RetryIn <= 0 {
-		cc.RetryIn = 1 * time.Minute
-	}
-
 	return nil
 }
 
-func NewConsumer(conf ConsumerConfig) (*Consumer, error) {
+type ConsumerOption func(*Consumer)
+
+func WithRetryDuration(d time.Duration) ConsumerOption {
+	return func(c *Consumer) {
+		c.retryIn = d
+	}
+}
+func WithLogger(logger Logger) ConsumerOption {
+	return func(c *Consumer) {
+		c.logger = logger
+	}
+}
+
+func NewConsumer(conf ConsumerConfig, opts ...ConsumerOption) (*Consumer, error) {
 	if err := conf.validate(); err != nil {
 		return nil, err
 	}
 
 	client := NewRedisClient(conf.RedisConfig)
-	return &Consumer{
+	c := &Consumer{
 		client:  client,
 		stream:  conf.Stream,
 		group:   conf.Group,
 		name:    conf.Name,
-		retryIn: conf.RetryIn,
+		retryIn: 1 * time.Minute,
 		logger:  newDefaultLogger(),
-	}, nil
+	}
+
+	for _, opt := range opts {
+		opt(c)
+	}
+
+	return c, nil
 }
 
 func (c *Consumer) Close() {
