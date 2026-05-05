@@ -21,6 +21,7 @@ type Consumer struct {
 }
 
 type ConsumerConfig struct {
+	RedisConfig
 	Stream  string        // Required: Stream name
 	Group   string        // Required: Consumer group name/
 	Name    string        // Required: Consumer name
@@ -28,8 +29,13 @@ type ConsumerConfig struct {
 }
 
 type Message struct {
-	ID     string
-	Values map[string]interface{}
+	ID      string
+	Values  map[string]interface{}
+	ackFunc func(ctx context.Context, id string)
+}
+
+func (m *Message) Ack(ctx context.Context) {
+	m.ackFunc(ctx, m.ID)
 }
 
 func (cc *ConsumerConfig) validate() error {
@@ -52,26 +58,23 @@ func (cc *ConsumerConfig) validate() error {
 	return nil
 }
 
-func NewConsumer(conn Client, config ConsumerConfig) (*Consumer, error) {
-	if err := config.validate(); err != nil {
+func NewConsumer(conf ConsumerConfig) (*Consumer, error) {
+	if err := conf.validate(); err != nil {
 		return nil, err
 	}
 
-	ctx := context.Background()
-	if err := conn.RegisterConsumer(ctx, config.Stream, config.Group, config.Name); err != nil {
-		return nil, err
-	}
+	client := NewRedisClient(conf.RedisConfig)
+	return &Consumer{
+		client:  client,
+		stream:  conf.Stream,
+		group:   conf.Group,
+		name:    conf.Name,
+		retryIn: conf.RetryIn,
+	}, nil
+}
 
-	consumer := &Consumer{
-		client:  conn,
-		stream:  config.Stream,
-		group:   config.Group,
-		name:    config.Name,
-		retryIn: config.RetryIn,
-		logger:  newDefaultLogger(),
-	}
-
-	return consumer, nil
+func (c *Consumer) Close() {
+	c.client.Close()
 }
 
 func (c *Consumer) Start(ctx context.Context, msgCount int64) <-chan Message {
@@ -103,8 +106,4 @@ func (c *Consumer) Start(ctx context.Context, msgCount int64) <-chan Message {
 	}()
 
 	return out
-}
-
-func (c *Consumer) Ack(ctx context.Context, messageIDs ...string) error {
-	return c.client.Ack(ctx, c.stream, c.group, messageIDs...)
 }
