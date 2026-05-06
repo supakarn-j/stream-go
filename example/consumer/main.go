@@ -32,6 +32,7 @@ func main() {
 			}
 			if consumerName == "" {
 				fmt.Println("Consumer name is required. Use --name or -n flag to specify the name")
+				os.Exit(1)
 			}
 
 			consumer, err := stream.NewConsumer(stream.ConsumerConfig{
@@ -43,12 +44,10 @@ func main() {
 				Group:  group,
 				Name:   consumerName,
 			})
-
-			defer consumer.Close()
-
 			if err != nil {
 				panic(err)
 			}
+			defer consumer.Close()
 
 			ctx := context.Background()
 			events := consumer.Start(ctx, 1)

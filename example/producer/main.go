@@ -44,13 +44,11 @@ func main() {
 				},
 				Name: streamName,
 			})
-
-			defer producer.Close()
-
 			if err != nil {
 				fmt.Printf("Error creating producer: %v\n", err)
 				os.Exit(1)
 			}
+			defer producer.Close()
 
 			message := make(map[string]interface{})
 			for _, kv := range *values {

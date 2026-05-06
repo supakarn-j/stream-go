@@ -9,37 +9,48 @@ import (
 var (
 	ErrEmptyConsumerName = errors.New("consumer name cannot be empty")
 	ErrEmptyGroupName    = errors.New("group name cannot be empty")
+	ErrAckUnavailable    = errors.New("message ack function is unavailable")
 )
 
+const DefaultConsumerRetryIn = time.Minute
+
 type Consumer struct {
-	client  Client
-	stream  string
-	group   string
-	name    string
-	retryIn time.Duration
-	logger  Logger
+	client     Client
+	ownsClient bool
+	stream     string
+	streams    []string
+	group      string
+	name       string
+	retryIn    time.Duration
+	logger     Logger
 }
 
 type ConsumerConfig struct {
 	RedisConfig
 	Stream  string        // Required: Stream name
+	Streams []string      // Optional: Stream names. If set, Stream is ignored.
 	Group   string        // Required: Consumer group name/
 	Name    string        // Required: Consumer name
 	RetryIn time.Duration // Optional: Time to wait before retrying failed messages, default is 1 minute
 }
 
 type Message struct {
+	Stream  string
 	ID      string
 	Values  map[string]interface{}
-	ackFunc func(ctx context.Context, id string)
+	ackFunc func(ctx context.Context, id string) error
 }
 
-func (m *Message) Ack(ctx context.Context) {
-	m.ackFunc(ctx, m.ID)
+func (m *Message) Ack(ctx context.Context) error {
+	if m.ackFunc == nil {
+		return ErrAckUnavailable
+	}
+
+	return m.ackFunc(ctx, m.ID)
 }
 
 func (cc *ConsumerConfig) validate() error {
-	if cc.Stream == "" {
+	if len(cc.streams()) == 0 {
 		return ErrEmptyStreamName
 	}
 
@@ -54,17 +65,51 @@ func (cc *ConsumerConfig) validate() error {
 	return nil
 }
 
-type ConsumerOption func(*Consumer)
+func (cc *ConsumerConfig) streams() []string {
+	if len(cc.Streams) > 0 {
+		return compactStrings(cc.Streams)
+	}
+	if cc.Stream == "" {
+		return nil
+	}
+
+	return []string{cc.Stream}
+}
+
+func compactStrings(values []string) []string {
+	compacted := make([]string, 0, len(values))
+	for _, value := range values {
+		if value != "" {
+			compacted = append(compacted, value)
+		}
+	}
+
+	return compacted
+}
+
+type ConsumerOption interface {
+	applyConsumer(*Consumer)
+}
+
+type consumerOptionFunc func(*Consumer)
+
+func (f consumerOptionFunc) applyConsumer(c *Consumer) {
+	f(c)
+}
+
+func (o clientOption) applyConsumer(c *Consumer) {
+	c.client = o.client
+	c.ownsClient = false
+}
+
+func (o loggerOption) applyConsumer(c *Consumer) {
+	c.logger = o.logger
+}
 
 func WithRetryDuration(d time.Duration) ConsumerOption {
-	return func(c *Consumer) {
+	return consumerOptionFunc(func(c *Consumer) {
 		c.retryIn = d
-	}
-}
-func WithLogger(logger Logger) ConsumerOption {
-	return func(c *Consumer) {
-		c.logger = logger
-	}
+	})
 }
 
 func NewConsumer(conf ConsumerConfig, opts ...ConsumerOption) (*Consumer, error) {
@@ -72,43 +117,88 @@ func NewConsumer(conf ConsumerConfig, opts ...ConsumerOption) (*Consumer, error)
 		return nil, err
 	}
 
-	client := NewRedisClient(conf.RedisConfig)
+	retryIn := conf.RetryIn
+	if retryIn <= 0 {
+		retryIn = DefaultConsumerRetryIn
+	}
+
 	c := &Consumer{
-		client:  client,
 		stream:  conf.Stream,
+		streams: conf.streams(),
 		group:   conf.Group,
 		name:    conf.Name,
-		retryIn: 1 * time.Minute,
-		logger:  newDefaultLogger(),
+		retryIn: retryIn,
 	}
 
 	for _, opt := range opts {
-		opt(c)
+		opt.applyConsumer(c)
+	}
+
+	if c.client == nil {
+		client, err := NewRedisClientWithContext(context.Background(), conf.RedisConfig)
+		if err != nil {
+			return nil, err
+		}
+		c.client = client
+		c.ownsClient = true
+	}
+
+	for _, stream := range c.streams {
+		if err := c.client.RegisterConsumer(context.Background(), stream, c.group, c.name); err != nil {
+			if c.ownsClient {
+				c.client.Close()
+			}
+			return nil, err
+		}
+	}
+	if c.logger == nil {
+		c.logger = newDefaultLogger()
 	}
 
 	return c, nil
 }
 
 func (c *Consumer) Close() {
-	c.client.Close()
+	if c.client != nil && c.ownsClient {
+		c.client.Close()
+	}
 }
 
 func (c *Consumer) Start(ctx context.Context, msgCount int64) <-chan Message {
+	out, errs := c.StartWithErrors(ctx, msgCount)
+
+	go func() {
+		for err := range errs {
+			c.logger.Errorf("Consumer '%s' read failed: %v", c.name, err)
+		}
+	}()
+
+	return out
+}
+
+func (c *Consumer) StartWithErrors(ctx context.Context, msgCount int64) (<-chan Message, <-chan error) {
 	out := make(chan Message, msgCount)
+	errs := make(chan error, 1)
 
 	go func() {
 		defer close(out)
-		defer func() {
-			if r := recover(); r != nil {
-				c.logger.Errorf("Consumer '%s' panicked: %v", c.name, r)
-			}
-		}()
+		defer close(errs)
 
-		c.logger.Infof("Consumer '%s' started for stream '%s' in group '%s'", c.name, c.stream, c.group)
+		c.logger.Infof("Consumer '%s' started for streams '%v' in group '%s'", c.name, c.streams, c.group)
 		for {
-			messages, err := c.client.Read(ctx, c.stream, c.group, c.name, msgCount, c.retryIn)
+			select {
+			case <-ctx.Done():
+				return
+			default:
+			}
+
+			messages, err := c.client.ReadStreams(ctx, c.streams, c.group, c.name, msgCount, c.retryIn)
 			if err != nil {
-				panic(err)
+				select {
+				case errs <- err:
+				case <-ctx.Done():
+				}
+				return
 			}
 
 			for _, msg := range messages {
@@ -121,5 +211,5 @@ func (c *Consumer) Start(ctx context.Context, msgCount int64) <-chan Message {
 		}
 	}()
 
-	return out
+	return out, errs
 }

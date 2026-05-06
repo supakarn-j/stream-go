@@ -2,7 +2,10 @@ package stream
 
 import (
 	"context"
-	"strings"
+	"encoding"
+	"encoding/json"
+	"errors"
+	"fmt"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -12,7 +15,7 @@ type Client interface {
 	Close()
 	Push(ctx context.Context, stream string, maxLen int64, message map[string]interface{}) error
 	RegisterConsumer(ctx context.Context, stream, group, name string) error
-	Read(ctx context.Context, streamName, group, consunerName string, count int64, retryIn time.Duration) ([]Message, error)
+	ReadStreams(ctx context.Context, streams []string, group, consumerName string, count int64, retryIn time.Duration) ([]Message, error)
 	Ack(ctx context.Context, stream, group string, ids ...string) error
 }
 
@@ -27,6 +30,15 @@ type RedisClient struct {
 }
 
 func NewRedisClient(conn RedisConfig) *RedisClient {
+	client, err := NewRedisClientWithContext(context.Background(), conn)
+	if err != nil {
+		panic(err)
+	}
+
+	return client
+}
+
+func NewRedisClientWithContext(ctx context.Context, conn RedisConfig) (*RedisClient, error) {
 	options := &redis.Options{
 		Addr:     conn.Addr,
 		Password: conn.Password,
@@ -34,22 +46,27 @@ func NewRedisClient(conn RedisConfig) *RedisClient {
 	}
 	rdb := redis.NewClient(options)
 
-	ctx := context.Background()
 	if err := rdb.Ping(ctx).Err(); err != nil {
-		panic(err)
+		_ = rdb.Close()
+		return nil, err
 	}
 
-	return &RedisClient{client: rdb}
+	return &RedisClient{client: rdb}, nil
 }
 
 func (r *RedisClient) Close() {
-	r.client.Close()
+	_ = r.client.Close()
 }
 
 func (r *RedisClient) Push(ctx context.Context, stream string, maxLen int64, message map[string]interface{}) error {
+	values, err := normalizeStreamValues(message)
+	if err != nil {
+		return err
+	}
+
 	args := &redis.XAddArgs{
 		Stream: stream,
-		Values: message,
+		Values: values,
 	}
 	if maxLen > 0 {
 		args.MaxLen = maxLen
@@ -59,9 +76,42 @@ func (r *RedisClient) Push(ctx context.Context, stream string, maxLen int64, mes
 	return r.client.XAdd(ctx, args).Err()
 }
 
+func normalizeStreamValues(message map[string]interface{}) (map[string]interface{}, error) {
+	values := make(map[string]interface{}, len(message))
+	for key, value := range message {
+		normalized, err := normalizeStreamValue(value)
+		if err != nil {
+			return nil, fmt.Errorf("stream field %q: %w", key, err)
+		}
+		values[key] = normalized
+	}
+
+	return values, nil
+}
+
+func normalizeStreamValue(value interface{}) (interface{}, error) {
+	switch v := value.(type) {
+	case nil:
+		return "null", nil
+	case string, []byte, bool,
+		int, int8, int16, int32, int64,
+		uint, uint8, uint16, uint32, uint64,
+		float32, float64:
+		return v, nil
+	case encoding.BinaryMarshaler:
+		return v, nil
+	default:
+		data, err := json.Marshal(v)
+		if err != nil {
+			return nil, err
+		}
+		return string(data), nil
+	}
+}
+
 func (r *RedisClient) RegisterConsumer(ctx context.Context, stream, group, name string) error {
 	err := r.client.XGroupCreateMkStream(ctx, stream, group, "$").Err()
-	if err != nil && !strings.Contains(err.Error(), "BUSYGROUP") {
+	if err != nil && !redis.HasErrorPrefix(err, "BUSYGROUP") {
 		return err
 	}
 
@@ -72,33 +122,48 @@ func (r *RedisClient) RegisterConsumer(ctx context.Context, stream, group, name 
 	return nil
 }
 
-func (r *RedisClient) Read(ctx context.Context, streamName, group, consunerName string, count int64, retryIn time.Duration) ([]Message, error) {
+func (r *RedisClient) ReadStreams(ctx context.Context, streams []string, group, consumerName string, count int64, retryIn time.Duration) ([]Message, error) {
 	args := &redis.XReadGroupArgs{
 		Group:    group,
-		Consumer: consunerName,
-		Streams:  []string{streamName, ">"},
+		Consumer: consumerName,
+		Streams:  redisReadGroupStreams(streams),
 		Count:    count,
 		Claim:    retryIn,
 	}
 	res, err := r.client.XReadGroup(ctx, args).Result()
 	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return nil, nil
+		}
 		return nil, err
 	}
 
 	var messages []Message
 	for _, stream := range res {
 		for _, msg := range stream.Messages {
+			streamName := stream.Stream
 			messages = append(messages, Message{
+				Stream: streamName,
 				ID:     msg.ID,
 				Values: msg.Values,
-				ackFunc: func(ctx context.Context, id string) {
-					r.client.XAck(ctx, streamName, group, id)
+				ackFunc: func(ctx context.Context, id string) error {
+					return r.Ack(ctx, streamName, group, id)
 				},
 			})
 		}
 	}
 
 	return messages, nil
+}
+
+func redisReadGroupStreams(streams []string) []string {
+	args := make([]string, 0, len(streams)*2)
+	args = append(args, streams...)
+	for range streams {
+		args = append(args, ">")
+	}
+
+	return args
 }
 
 func (r *RedisClient) Ack(ctx context.Context, stream, group string, ids ...string) error {
