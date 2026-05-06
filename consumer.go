@@ -17,7 +17,6 @@ const DefaultConsumerRetryIn = time.Minute
 type Consumer struct {
 	client     Client
 	ownsClient bool
-	stream     string
 	streams    []string
 	group      string
 	name       string
@@ -27,8 +26,7 @@ type Consumer struct {
 
 type ConsumerConfig struct {
 	RedisConfig
-	Stream  string        // Required: Stream name
-	Streams []string      // Optional: Stream names. If set, Stream is ignored.
+	Streams []string      // Required: Stream names.
 	Group   string        // Required: Consumer group name/
 	Name    string        // Required: Consumer name
 	RetryIn time.Duration // Optional: Time to wait before retrying failed messages, default is 1 minute
@@ -66,14 +64,7 @@ func (cc *ConsumerConfig) validate() error {
 }
 
 func (cc *ConsumerConfig) streams() []string {
-	if len(cc.Streams) > 0 {
-		return compactStrings(cc.Streams)
-	}
-	if cc.Stream == "" {
-		return nil
-	}
-
-	return []string{cc.Stream}
+	return compactStrings(cc.Streams)
 }
 
 func compactStrings(values []string) []string {
@@ -123,7 +114,6 @@ func NewConsumer(conf ConsumerConfig, opts ...ConsumerOption) (*Consumer, error)
 	}
 
 	c := &Consumer{
-		stream:  conf.Stream,
 		streams: conf.streams(),
 		group:   conf.Group,
 		name:    conf.Name,

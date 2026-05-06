@@ -40,9 +40,9 @@ func main() {
 					Addr:     fmt.Sprintf("%s:%s", host, port),
 					Password: password,
 				},
-				Stream: streamName,
-				Group:  group,
-				Name:   consumerName,
+				Streams: []string{streamName},
+				Group:   group,
+				Name:    consumerName,
 			})
 			if err != nil {
 				panic(err)

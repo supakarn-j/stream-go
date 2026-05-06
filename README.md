@@ -79,7 +79,7 @@ func main() {
 			Password: "",
 			DB: 0,
 		},
-		Stream:  "mystream",
+		Streams: []string{"mystream"},
 		Group:   "test-group",
 		Name:    "consumer-1",
 		RetryIn: 1 * time.Minute,
@@ -152,7 +152,7 @@ if err != nil {
 
 consumer, err := stream.NewConsumer(
 	stream.ConsumerConfig{
-		Stream: "mystream",
+		Streams: []string{"mystream"},
 		Group:  "test-group",
 		Name:   "consumer-1",
 	},

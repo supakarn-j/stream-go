@@ -15,8 +15,8 @@ func TestNewConsumerValidation(t *testing.T) {
 		wantErr error
 	}{
 		{"empty stream", ConsumerConfig{Group: "group", Name: "consumer"}, ErrEmptyStreamName},
-		{"empty group", ConsumerConfig{Stream: "stream", Name: "consumer"}, ErrEmptyGroupName},
-		{"empty consumer", ConsumerConfig{Stream: "stream", Group: "group"}, ErrEmptyConsumerName},
+		{"empty group", ConsumerConfig{Streams: []string{"stream"}, Name: "consumer"}, ErrEmptyGroupName},
+		{"empty consumer", ConsumerConfig{Streams: []string{"stream"}, Group: "group"}, ErrEmptyConsumerName},
 	}
 
 	for _, tt := range tests {
@@ -34,7 +34,7 @@ func TestNewConsumerRegistersAndHonorsRetryIn(t *testing.T) {
 	retryIn := 5 * time.Second
 
 	consumer, err := NewConsumer(ConsumerConfig{
-		Stream:  "stream",
+		Streams: []string{"stream"},
 		Group:   "group",
 		Name:    "consumer",
 		RetryIn: retryIn,
@@ -84,9 +84,9 @@ func TestNewConsumerRejectsEmptyStreams(t *testing.T) {
 
 func TestNewConsumerDefaultsRetryIn(t *testing.T) {
 	consumer, err := NewConsumer(ConsumerConfig{
-		Stream: "stream",
-		Group:  "group",
-		Name:   "consumer",
+		Streams: []string{"stream"},
+		Group:   "group",
+		Name:    "consumer",
 	}, WithClient(&fakeClient{}))
 	if err != nil {
 		t.Fatalf("NewConsumer() error = %v", err)
@@ -102,9 +102,9 @@ func TestNewConsumerReturnsRegisterError(t *testing.T) {
 	client := &fakeClient{registerErr: wantErr}
 
 	_, err := NewConsumer(ConsumerConfig{
-		Stream: "stream",
-		Group:  "group",
-		Name:   "consumer",
+		Streams: []string{"stream"},
+		Group:   "group",
+		Name:    "consumer",
 	}, WithClient(client))
 	if !errors.Is(err, wantErr) {
 		t.Fatalf("NewConsumer() error = %v, want %v", err, wantErr)
@@ -117,9 +117,9 @@ func TestNewConsumerReturnsRegisterError(t *testing.T) {
 func TestConsumerCloseDoesNotCloseInjectedClient(t *testing.T) {
 	client := &fakeClient{}
 	consumer, err := NewConsumer(ConsumerConfig{
-		Stream: "stream",
-		Group:  "group",
-		Name:   "consumer",
+		Streams: []string{"stream"},
+		Group:   "group",
+		Name:    "consumer",
 	}, WithClient(client))
 	if err != nil {
 		t.Fatalf("NewConsumer() error = %v", err)
@@ -135,9 +135,9 @@ func TestConsumerUsesSharedLoggerOption(t *testing.T) {
 	logger := &fakeLogger{}
 	consumer, err := NewConsumer(
 		ConsumerConfig{
-			Stream: "stream",
-			Group:  "group",
-			Name:   "consumer",
+			Streams: []string{"stream"},
+			Group:   "group",
+			Name:    "consumer",
 		},
 		WithClient(&fakeClient{}),
 		WithLogger(logger),
@@ -162,9 +162,9 @@ func TestConsumerUsesSharedLoggerOption(t *testing.T) {
 func TestConsumerUsesDefaultLoggerWhenLoggerIsNil(t *testing.T) {
 	consumer, err := NewConsumer(
 		ConsumerConfig{
-			Stream: "stream",
-			Group:  "group",
-			Name:   "consumer",
+			Streams: []string{"stream"},
+			Group:   "group",
+			Name:    "consumer",
 		},
 		WithClient(&fakeClient{}),
 		WithLogger(nil),
@@ -181,9 +181,9 @@ func TestConsumerStartWithErrorsReturnsReadError(t *testing.T) {
 	wantErr := errors.New("read failed")
 	client := &fakeClient{readErr: wantErr}
 	consumer, err := NewConsumer(ConsumerConfig{
-		Stream: "stream",
-		Group:  "group",
-		Name:   "consumer",
+		Streams: []string{"stream"},
+		Group:   "group",
+		Name:    "consumer",
 	}, WithClient(client))
 	if err != nil {
 		t.Fatalf("NewConsumer() error = %v", err)
