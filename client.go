@@ -145,6 +145,7 @@ func (r *RedisClient) ReadStreams(ctx context.Context, streams []string, group, 
 			messages = append(messages, Message{
 				Stream: streamName,
 				ID:     msg.ID,
+				Type:   streamMessageType(msg.Values),
 				Values: msg.Values,
 				ackFunc: func(ctx context.Context, id string) error {
 					return r.Ack(ctx, streamName, group, id)
@@ -154,6 +155,19 @@ func (r *RedisClient) ReadStreams(ctx context.Context, streams []string, group, 
 	}
 
 	return messages, nil
+}
+
+func streamMessageType(values map[string]interface{}) string {
+	value, ok := values["type"]
+	if !ok {
+		return ""
+	}
+
+	if typ, ok := value.(string); ok {
+		return typ
+	}
+
+	return fmt.Sprint(value)
 }
 
 func redisReadGroupStreams(streams []string) []string {

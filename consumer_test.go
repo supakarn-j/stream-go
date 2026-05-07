@@ -255,3 +255,74 @@ func TestMessageAckUnavailable(t *testing.T) {
 		t.Fatalf("Message.Ack() error = %v, want %v", err, ErrAckUnavailable)
 	}
 }
+
+func TestMessageDecode(t *testing.T) {
+	type ticketData struct {
+		TicketKey string `json:"ticket_key"`
+		URL       string `json:"url"`
+		Recipient string `json:"recipient"`
+	}
+	type ticketEvent struct {
+		ID       string                 `json:"id"`
+		Type     string                 `json:"type"`
+		Version  int                    `json:"version"`
+		Metadata map[string]interface{} `json:"metadata"`
+		Data     ticketData             `json:"data"`
+	}
+
+	message := Message{
+		Values: map[string]interface{}{
+			"id":       "some-unique-id",
+			"type":     "ticket.created",
+			"version":  "1",
+			"metadata": `{"source":"jira"}`,
+			"data":     `{"ticket_key":"ABC-123","url":"https://example.test","recipient":"user@example.com"}`,
+		},
+	}
+
+	var event ticketEvent
+	if err := message.Decode(&event); err != nil {
+		t.Fatalf("Message.Decode() error = %v", err)
+	}
+
+	if event.ID != "some-unique-id" {
+		t.Fatalf("event.ID = %q, want %q", event.ID, "some-unique-id")
+	}
+	if event.Version != 1 {
+		t.Fatalf("event.Version = %d, want 1", event.Version)
+	}
+	if event.Metadata["source"] != "jira" {
+		t.Fatalf("event.Metadata = %v, want source=jira", event.Metadata)
+	}
+	if event.Data.TicketKey != "ABC-123" {
+		t.Fatalf("event.Data.TicketKey = %q, want %q", event.Data.TicketKey, "ABC-123")
+	}
+}
+
+func TestMessageDecodeValue(t *testing.T) {
+	type ticketData struct {
+		TicketKey string `json:"ticket_key"`
+	}
+
+	message := Message{
+		Values: map[string]interface{}{
+			"data": `{"ticket_key":"ABC-123"}`,
+		},
+	}
+
+	var data ticketData
+	if err := message.DecodeValue("data", &data); err != nil {
+		t.Fatalf("Message.DecodeValue() error = %v", err)
+	}
+	if data.TicketKey != "ABC-123" {
+		t.Fatalf("data.TicketKey = %q, want %q", data.TicketKey, "ABC-123")
+	}
+}
+
+func TestMessageDecodeValueMissingField(t *testing.T) {
+	message := Message{Values: map[string]interface{}{}}
+	var data struct{}
+	if err := message.DecodeValue("data", &data); !errors.Is(err, ErrMessageFieldNotFound) {
+		t.Fatalf("Message.DecodeValue() error = %v, want %v", err, ErrMessageFieldNotFound)
+	}
+}

@@ -130,3 +130,23 @@ func TestRedisReadGroupStreams(t *testing.T) {
 		t.Fatalf("redisReadGroupStreams() = %v, want %v", got, want)
 	}
 }
+
+func TestStreamMessageType(t *testing.T) {
+	tests := []struct {
+		name   string
+		values map[string]interface{}
+		want   string
+	}{
+		{"string type", map[string]interface{}{"type": "ticket.created"}, "ticket.created"},
+		{"numeric type", map[string]interface{}{"type": 123}, "123"},
+		{"missing type", map[string]interface{}{}, ""},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := streamMessageType(tt.values); got != tt.want {
+				t.Fatalf("streamMessageType() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}

@@ -9,7 +9,6 @@ import (
 var (
 	ErrEmptyConsumerName = errors.New("consumer name cannot be empty")
 	ErrEmptyGroupName    = errors.New("group name cannot be empty")
-	ErrAckUnavailable    = errors.New("message ack function is unavailable")
 )
 
 const DefaultConsumerRetryIn = time.Minute
@@ -30,21 +29,6 @@ type ConsumerConfig struct {
 	Group   string        // Required: Consumer group name/
 	Name    string        // Required: Consumer name
 	RetryIn time.Duration // Optional: Time to wait before retrying failed messages, default is 1 minute
-}
-
-type Message struct {
-	Stream  string
-	ID      string
-	Values  map[string]interface{}
-	ackFunc func(ctx context.Context, id string) error
-}
-
-func (m *Message) Ack(ctx context.Context) error {
-	if m.ackFunc == nil {
-		return ErrAckUnavailable
-	}
-
-	return m.ackFunc(ctx, m.ID)
 }
 
 func (cc *ConsumerConfig) validate() error {

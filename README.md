@@ -128,6 +128,28 @@ for event := range consumer.Start(ctx, 10) {
 }
 ```
 
+Use `Message.Type` to route arbitrary payloads, then `DecodeValue` to load the payload field into a typed struct. Use `Decode` when you want to load the full message into one struct.
+
+```go
+type TicketCreated struct {
+	TicketKey string `json:"ticket_key"`
+	URL       string `json:"url"`
+	Recipient string `json:"recipient"`
+}
+
+for event := range consumer.Start(ctx, 10) {
+	switch event.Type {
+	case "ticket.created":
+		var data TicketCreated
+		if err := event.DecodeValue("data", &data); err != nil {
+			log.Printf("failed to decode payload %s: %v", event.ID, err)
+			continue
+		}
+		// process data
+	}
+}
+```
+
 ### Injecting a Client
 
 Use `WithClient` to share a Redis client or inject a test double:
@@ -198,4 +220,8 @@ Integration tests use `redis/docker-compose.yml`:
 ```bash
 docker compose -f redis/docker-compose.yml up -d
 STREAM_GO_INTEGRATION=1 go test ./...
+```
+
+```
+go run example/producer/main.go -H 10.250.2.102 -p h0VvsKtmhE1S -s event:contact -v id=2222 -v type=contact.form.submitted -v version=1 -v data='{"name": "test", "email":"gecad23850@iapapi.com", "company": "", "subject":"test","messages":"abvsdbjo"}' -v metadata={}
 ```
