@@ -4,14 +4,15 @@ import (
 	"context"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/redis/go-redis/v9"
 )
 
-func TestNewProducerValidation(t *testing.T) {
-	_, err := NewProducer(ProducerConfig{Name: ""}, WithClient(&fakeClient{}))
-	if err != ErrEmptyStreamName {
-		t.Fatalf("NewProducer() error = %v, want %v", err, ErrEmptyStreamName)
+func TestNewProducerAllowsEmptyDefaultStream(t *testing.T) {
+	_, err := NewProducer(ProducerConfig{}, WithClient(&fakeClient{}))
+	if err != nil {
+		t.Fatalf("NewProducer() error = %v", err)
 	}
 }
 
@@ -35,6 +36,77 @@ func TestProducerPushUsesDefaultMaxLen(t *testing.T) {
 	}
 	if client.pushMessage["field1"] != "value1" {
 		t.Fatalf("Push message = %v, want field1=value1", client.pushMessage)
+	}
+}
+
+func TestProducerPushAddsTimestamp(t *testing.T) {
+	client := &fakeClient{}
+	producer, err := NewProducer(ProducerConfig{Name: "test_stream"}, WithClient(client))
+	if err != nil {
+		t.Fatalf("NewProducer() error = %v", err)
+	}
+
+	message := map[string]interface{}{"field1": "value1"}
+	before := time.Now().UTC()
+	if err := producer.Push(context.Background(), message); err != nil {
+		t.Fatalf("Producer.Push() error = %v", err)
+	}
+	after := time.Now().UTC()
+
+	value, ok := client.pushMessage["timestamp"].(string)
+	if !ok {
+		t.Fatalf("timestamp = %v, want RFC3339Nano string", client.pushMessage["timestamp"])
+	}
+	timestamp, err := time.Parse(time.RFC3339Nano, value)
+	if err != nil {
+		t.Fatalf("timestamp parse error = %v", err)
+	}
+	if timestamp.Before(before) || timestamp.After(after) {
+		t.Fatalf("timestamp = %v, want between %v and %v", timestamp, before, after)
+	}
+	if _, ok := message["timestamp"]; ok {
+		t.Fatal("Producer.Push() mutated caller message with timestamp")
+	}
+}
+
+func TestProducerPushToUsesExplicitStream(t *testing.T) {
+	client := &fakeClient{}
+	producer, err := NewProducer(ProducerConfig{}, WithClient(client))
+	if err != nil {
+		t.Fatalf("NewProducer() error = %v", err)
+	}
+
+	if err := producer.PushTo(context.Background(), "stream-a", map[string]interface{}{"field": "value"}); err != nil {
+		t.Fatalf("Producer.PushTo() error = %v", err)
+	}
+
+	if client.pushStream != "stream-a" {
+		t.Fatalf("Push stream = %q, want %q", client.pushStream, "stream-a")
+	}
+	if client.pushMessage["field"] != "value" {
+		t.Fatalf("Push message = %v, want field=value", client.pushMessage)
+	}
+}
+
+func TestProducerPushWithoutDefaultStreamReturnsError(t *testing.T) {
+	producer, err := NewProducer(ProducerConfig{}, WithClient(&fakeClient{}))
+	if err != nil {
+		t.Fatalf("NewProducer() error = %v", err)
+	}
+
+	if err := producer.Push(context.Background(), map[string]interface{}{"field": "value"}); err != ErrEmptyStreamName {
+		t.Fatalf("Producer.Push() error = %v, want %v", err, ErrEmptyStreamName)
+	}
+}
+
+func TestProducerPushToRejectsEmptyStream(t *testing.T) {
+	producer, err := NewProducer(ProducerConfig{}, WithClient(&fakeClient{}))
+	if err != nil {
+		t.Fatalf("NewProducer() error = %v", err)
+	}
+
+	if err := producer.PushTo(context.Background(), "", map[string]interface{}{"field": "value"}); err != ErrEmptyStreamName {
+		t.Fatalf("Producer.PushTo() error = %v, want %v", err, ErrEmptyStreamName)
 	}
 }
 
@@ -117,19 +189,16 @@ func TestProducerPushIntegration(t *testing.T) {
 			})
 
 			if err != nil {
-				if err != tt.wantErr {
-					t.Errorf("NewProducer() error = %v, wantErr %v", err, tt.wantErr)
-				}
+				t.Errorf("NewProducer() error = %v", err)
 				return
 			}
 			defer producer.Close()
-			if tt.wantErr != nil {
-				t.Errorf("NewProducer() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
 			err = producer.Push(ctx, tt.message)
 			if err != tt.wantErr {
 				t.Errorf("Producer.Push() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			if tt.wantErr != nil {
+				return
 			}
 			st, err := conn.client.XRead(ctx, &redis.XReadArgs{
 				Streams: []string{tt.stream, "0"},

@@ -143,10 +143,12 @@ func (r *RedisClient) ReadStreams(ctx context.Context, streams []string, group, 
 		for _, msg := range stream.Messages {
 			streamName := stream.Stream
 			messages = append(messages, Message{
-				Stream: streamName,
-				ID:     msg.ID,
-				Type:   streamMessageType(msg.Values),
-				Values: msg.Values,
+				Stream:    streamName,
+				ID:        msg.ID,
+				Type:      streamMessageType(msg.Values),
+				Source:    streamMessageStringField(msg.Values, "source"),
+				Timestamp: streamMessageTimestamp(msg.Values),
+				Values:    msg.Values,
 				ackFunc: func(ctx context.Context, id string) error {
 					return r.Ack(ctx, streamName, group, id)
 				},
@@ -158,7 +160,25 @@ func (r *RedisClient) ReadStreams(ctx context.Context, streams []string, group, 
 }
 
 func streamMessageType(values map[string]interface{}) string {
-	value, ok := values["type"]
+	return streamMessageStringField(values, "type")
+}
+
+func streamMessageTimestamp(values map[string]interface{}) time.Time {
+	value := streamMessageStringField(values, "timestamp")
+	if value == "" {
+		return time.Time{}
+	}
+
+	timestamp, err := time.Parse(time.RFC3339Nano, value)
+	if err != nil {
+		return time.Time{}
+	}
+
+	return timestamp
+}
+
+func streamMessageStringField(values map[string]interface{}, field string) string {
+	value, ok := values[field]
 	if !ok {
 		return ""
 	}

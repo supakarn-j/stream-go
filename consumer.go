@@ -7,12 +7,16 @@ import (
 )
 
 var (
+	// ErrEmptyConsumerName is returned when a consumer name is required but empty.
 	ErrEmptyConsumerName = errors.New("consumer name cannot be empty")
-	ErrEmptyGroupName    = errors.New("group name cannot be empty")
+	// ErrEmptyGroupName is returned when a consumer group name is required but empty.
+	ErrEmptyGroupName = errors.New("group name cannot be empty")
 )
 
+// DefaultConsumerRetryIn is the default delay before retrying pending messages.
 const DefaultConsumerRetryIn = time.Minute
 
+// Consumer reads messages from one or more Redis Streams in a consumer group.
 type Consumer struct {
 	client     Client
 	ownsClient bool
@@ -23,6 +27,7 @@ type Consumer struct {
 	logger     Logger
 }
 
+// ConsumerConfig configures a Consumer.
 type ConsumerConfig struct {
 	RedisConfig
 	Streams []string      // Required: Stream names.
@@ -81,12 +86,14 @@ func (o loggerOption) applyConsumer(c *Consumer) {
 	c.logger = o.logger
 }
 
+// WithRetryDuration configures how long the consumer waits before retrying failed messages.
 func WithRetryDuration(d time.Duration) ConsumerOption {
 	return consumerOptionFunc(func(c *Consumer) {
 		c.retryIn = d
 	})
 }
 
+// NewConsumer creates a consumer and registers it for each configured stream.
 func NewConsumer(conf ConsumerConfig, opts ...ConsumerOption) (*Consumer, error) {
 	if err := conf.validate(); err != nil {
 		return nil, err
@@ -132,12 +139,14 @@ func NewConsumer(conf ConsumerConfig, opts ...ConsumerOption) (*Consumer, error)
 	return c, nil
 }
 
+// Close closes the consumer's owned client, if it created one.
 func (c *Consumer) Close() {
 	if c.client != nil && c.ownsClient {
 		c.client.Close()
 	}
 }
 
+// Start begins reading messages and logs read errors internally.
 func (c *Consumer) Start(ctx context.Context, msgCount int64) <-chan Message {
 	out, errs := c.StartWithErrors(ctx, msgCount)
 
@@ -150,6 +159,7 @@ func (c *Consumer) Start(ctx context.Context, msgCount int64) <-chan Message {
 	return out
 }
 
+// StartWithErrors begins reading messages and returns separate channels for messages and read errors.
 func (c *Consumer) StartWithErrors(ctx context.Context, msgCount int64) (<-chan Message, <-chan error) {
 	out := make(chan Message, msgCount)
 	errs := make(chan error, 1)

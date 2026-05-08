@@ -7,6 +7,7 @@ import (
 	"os"
 	"reflect"
 	"testing"
+	"time"
 )
 
 func TestNewRedisClientWithContextIntegration(t *testing.T) {
@@ -148,5 +149,45 @@ func TestStreamMessageType(t *testing.T) {
 				t.Fatalf("streamMessageType() = %q, want %q", got, tt.want)
 			}
 		})
+	}
+}
+
+func TestStreamMessageTimestamp(t *testing.T) {
+	want := time.Date(2026, 5, 8, 12, 34, 56, 789, time.UTC)
+
+	tests := []struct {
+		name   string
+		values map[string]interface{}
+		want   time.Time
+	}{
+		{"valid timestamp", map[string]interface{}{"timestamp": want.Format(time.RFC3339Nano)}, want},
+		{"missing timestamp", map[string]interface{}{}, time.Time{}},
+		{"invalid timestamp", map[string]interface{}{"timestamp": "not-a-time"}, time.Time{}},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := streamMessageTimestamp(tt.values); !got.Equal(tt.want) {
+				t.Fatalf("streamMessageTimestamp() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestStreamMessageStringField(t *testing.T) {
+	values := map[string]interface{}{
+		"type":   "ticket.created",
+		"source": "jira",
+		"count":  3,
+	}
+
+	if got := streamMessageStringField(values, "source"); got != "jira" {
+		t.Fatalf("streamMessageStringField(source) = %q, want %q", got, "jira")
+	}
+	if got := streamMessageStringField(values, "count"); got != "3" {
+		t.Fatalf("streamMessageStringField(count) = %q, want %q", got, "3")
+	}
+	if got := streamMessageStringField(values, "missing"); got != "" {
+		t.Fatalf("streamMessageStringField(missing) = %q, want empty string", got)
 	}
 }

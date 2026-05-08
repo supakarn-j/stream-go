@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
 
 var (
@@ -14,12 +15,14 @@ var (
 )
 
 type Message struct {
-	Stream  string
-	ID      string
-	Type    string
-	Version int64
-	Values  map[string]interface{}
-	ackFunc func(ctx context.Context, id string) error
+	Stream    string
+	ID        string
+	Type      string
+	Source    string
+	Version   int64
+	Timestamp time.Time
+	Values    map[string]interface{}
+	ackFunc   func(ctx context.Context, id string) error
 }
 
 func (m *Message) Ack(ctx context.Context) error {

@@ -38,7 +38,7 @@ func main() {
 			Password: "",
 			DB: 0,
 		},
-		Name: "mystream"
+		Name: "mystream", // Optional default stream for Push.
 	})
 	if err != nil {
 		panic(err)
@@ -60,6 +60,17 @@ func main() {
 ```
 
 Top-level message fields can include nested maps, slices, and structs. Complex values are JSON-encoded before writing to Redis Streams, so consumers should unmarshal those fields when they need structured data.
+`Producer.Push` automatically adds a UTC `timestamp` field in RFC3339Nano format.
+Use `PushTo` when one producer should write to multiple streams:
+
+```go
+if err := producer.PushTo(ctx, "ticket-events", map[string]interface{}{"type": "ticket.created"}); err != nil {
+	panic(err)
+}
+if err := producer.PushTo(ctx, "comment-events", map[string]interface{}{"type": "comment.created"}); err != nil {
+	panic(err)
+}
+```
 
 ### Consumer 
 ```go
@@ -105,6 +116,7 @@ func main() {
 ```
 
 Use `Streams` to read from multiple streams with one consumer group. `Message.Stream` identifies which stream produced each message and `Message.Ack` acknowledges against that same stream.
+`Message.Timestamp` is loaded from the producer's automatic `timestamp` field.
 
 ```go
 consumer, err := stream.NewConsumer(stream.ConsumerConfig{
