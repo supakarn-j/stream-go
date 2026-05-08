@@ -37,13 +37,15 @@ func main() {
 			}
 			fmt.Printf("Pushing message to Redis server at %s:%s stream '%s'...\n", host, port, streamName)
 
-			producer, err := stream.NewProducer(stream.ProducerConfig{
-				RedisConfig: stream.RedisConfig{
+			producer, err := stream.NewProducer(
+				stream.ProducerConfig{
+					Name: streamName,
+				},
+				stream.WithNewRedisClient(stream.RedisConfig{
 					Addr:     fmt.Sprintf("%s:%s", host, port),
 					Password: password,
-				},
-				Name: streamName,
-			})
+				}),
+			)
 			if err != nil {
 				fmt.Printf("Error creating producer: %v\n", err)
 				os.Exit(1)

@@ -35,15 +35,17 @@ func main() {
 				os.Exit(1)
 			}
 
-			consumer, err := stream.NewConsumer(stream.ConsumerConfig{
-				RedisConfig: stream.RedisConfig{
+			consumer, err := stream.NewConsumer(
+				stream.ConsumerConfig{
+					Streams: []string{streamName},
+					Group:   group,
+					Name:    consumerName,
+				},
+				stream.WithNewRedisClient(stream.RedisConfig{
 					Addr:     fmt.Sprintf("%s:%s", host, port),
 					Password: password,
-				},
-				Streams: []string{streamName},
-				Group:   group,
-				Name:    consumerName,
-			})
+				}),
+			)
 			if err != nil {
 				panic(err)
 			}

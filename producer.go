@@ -16,16 +16,16 @@ const DefaultProducerMaxLen int64 = 1000
 
 // Producer writes messages to Redis Streams.
 type Producer struct {
-	client     Client
-	ownsClient bool
-	streamName string
-	maxLen     int64
-	logger     Logger
+	client      Client
+	ownsClient  bool
+	redisConfig *RedisConfig
+	streamName  string
+	maxLen      int64
+	logger      Logger
 }
 
 // ProducerConfig configures a Producer.
 type ProducerConfig struct {
-	RedisConfig
 	Name   string // Optional: Default stream name for Push.
 	MaxLen int64  // Optional: Maximum stream length, default is 1000
 }
@@ -62,6 +62,19 @@ func (o clientOption) applyProducer(p *Producer) {
 	p.ownsClient = false
 }
 
+type newRedisClientOption struct {
+	config RedisConfig
+}
+
+// WithNewRedisClient configures a producer or consumer to create and own a new Redis client.
+func WithNewRedisClient(config RedisConfig) newRedisClientOption {
+	return newRedisClientOption{config: config}
+}
+
+func (o newRedisClientOption) applyProducer(p *Producer) {
+	p.redisConfig = &o.config
+}
+
 type loggerOption struct {
 	logger Logger
 }
@@ -91,7 +104,12 @@ func NewProducer(config ProducerConfig, opts ...ProducerOption) (*Producer, erro
 	}
 
 	if producer.client == nil {
-		client, err := NewRedisClientWithContext(context.Background(), config.RedisConfig)
+		redisConfig := RedisConfig{}
+		if producer.redisConfig != nil {
+			redisConfig = *producer.redisConfig
+		}
+
+		client, err := NewRedisClientWithContext(context.Background(), redisConfig)
 		if err != nil {
 			return nil, err
 		}

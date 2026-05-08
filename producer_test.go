@@ -181,12 +181,14 @@ func TestProducerPushIntegration(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			producer, err := NewProducer(ProducerConfig{
-				RedisConfig: RedisConfig{
-					Addr: "localhost:6379",
+			producer, err := NewProducer(
+				ProducerConfig{
+					Name: tt.stream,
 				},
-				Name: tt.stream,
-			})
+				WithNewRedisClient(RedisConfig{
+					Addr: "localhost:6379",
+				}),
+			)
 
 			if err != nil {
 				t.Errorf("NewProducer() error = %v", err)

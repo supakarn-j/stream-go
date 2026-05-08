@@ -18,18 +18,18 @@ const DefaultConsumerRetryIn = time.Minute
 
 // Consumer reads messages from one or more Redis Streams in a consumer group.
 type Consumer struct {
-	client     Client
-	ownsClient bool
-	streams    []string
-	group      string
-	name       string
-	retryIn    time.Duration
-	logger     Logger
+	client      Client
+	ownsClient  bool
+	redisConfig *RedisConfig
+	streams     []string
+	group       string
+	name        string
+	retryIn     time.Duration
+	logger      Logger
 }
 
 // ConsumerConfig configures a Consumer.
 type ConsumerConfig struct {
-	RedisConfig
 	Streams []string      // Required: Stream names.
 	Group   string        // Required: Consumer group name/
 	Name    string        // Required: Consumer name
@@ -82,6 +82,10 @@ func (o clientOption) applyConsumer(c *Consumer) {
 	c.ownsClient = false
 }
 
+func (o newRedisClientOption) applyConsumer(c *Consumer) {
+	c.redisConfig = &o.config
+}
+
 func (o loggerOption) applyConsumer(c *Consumer) {
 	c.logger = o.logger
 }
@@ -116,7 +120,12 @@ func NewConsumer(conf ConsumerConfig, opts ...ConsumerOption) (*Consumer, error)
 	}
 
 	if c.client == nil {
-		client, err := NewRedisClientWithContext(context.Background(), conf.RedisConfig)
+		redisConfig := RedisConfig{}
+		if c.redisConfig != nil {
+			redisConfig = *c.redisConfig
+		}
+
+		client, err := NewRedisClientWithContext(context.Background(), redisConfig)
 		if err != nil {
 			return nil, err
 		}

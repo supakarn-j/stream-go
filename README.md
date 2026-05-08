@@ -32,14 +32,16 @@ import (
 )
 
 func main() {
-	producer, err := stream.NewProducer(stream.ProducerConfig{
-		RedisConfig: stream.RedisConfig{
+	producer, err := stream.NewProducer(
+		stream.ProducerConfig{
+			Name: "mystream", // Optional default stream for Push.
+		},
+		stream.WithNewRedisClient(stream.RedisConfig{
 			Addr:     "localhost:6379",
 			Password: "",
 			DB: 0,
-		},
-		Name: "mystream", // Optional default stream for Push.
-	})
+		}),
+	)
 	if err != nil {
 		panic(err)
 	}
@@ -84,17 +86,19 @@ import (
 )
 
 func main() {
-	consumer, err := stream.NewConsumer(stream.ConsumerConfig{
-		RedisConfig: stream.RedisConfig{
+	consumer, err := stream.NewConsumer(
+		stream.ConsumerConfig{
+			Streams: []string{"mystream"},
+			Group:   "test-group",
+			Name:    "consumer-1",
+			RetryIn: 1 * time.Minute,
+		},
+		stream.WithNewRedisClient(stream.RedisConfig{
 			Addr: "localhost:6379",
 			Password: "",
 			DB: 0,
-		},
-		Streams: []string{"mystream"},
-		Group:   "test-group",
-		Name:    "consumer-1",
-		RetryIn: 1 * time.Minute,
-	})
+		}),
+	)
 	if err != nil {
 		panic(err)
 	}
@@ -119,14 +123,16 @@ Use `Streams` to read from multiple streams with one consumer group. `Message.St
 `Message.Timestamp` is loaded from the producer's automatic `timestamp` field.
 
 ```go
-consumer, err := stream.NewConsumer(stream.ConsumerConfig{
-	RedisConfig: stream.RedisConfig{
-		Addr: "localhost:6379",
+consumer, err := stream.NewConsumer(
+	stream.ConsumerConfig{
+		Streams: []string{"tickets", "comments"},
+		Group:   "test-group",
+		Name:    "consumer-1",
 	},
-	Streams: []string{"tickets", "comments"},
-	Group:   "test-group",
-	Name:    "consumer-1",
-})
+	stream.WithNewRedisClient(stream.RedisConfig{
+		Addr: "localhost:6379",
+	}),
+)
 if err != nil {
 	panic(err)
 }
@@ -162,9 +168,9 @@ for event := range consumer.Start(ctx, 10) {
 }
 ```
 
-### Injecting a Client
+### Redis Clients
 
-Use `WithClient` to share a Redis client or inject a test double:
+Use `WithNewRedisClient` to let a producer or consumer create and own a Redis client. Use `WithClient` to share a Redis client or inject a test double:
 
 ```go
 ctx := context.Background()
