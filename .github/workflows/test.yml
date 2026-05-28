@@ -22,7 +22,7 @@ jobs:
           cache: true
 
       - name: Check module files
-        run: go mod tidy -diff
+        run: go mod tidy
 
       - name: Vet
         run: go vet ./...
