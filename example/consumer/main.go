@@ -8,11 +8,12 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"gitlab.com/hannlync/backend/stream-go.git"
+	stream "github.com/supakarn-j/event-manager"
 )
 
 func main() {
 	var host, port, password, streamName, group, consumerName string
+	var noAckFlag *bool
 
 	defer func() {
 		if r := recover(); r != nil {
@@ -56,7 +57,11 @@ func main() {
 
 			for event := range events {
 				log.Printf("Received event at %s: %v", time.Now().String(), event)
-				event.Ack(ctx)
+				if !*noAckFlag {
+					if err := event.Ack(ctx); err != nil {
+						log.Printf("Failed to acknowledge event: %v", err)
+					}
+				}
 			}
 		},
 	}
@@ -67,6 +72,7 @@ func main() {
 	cmd.Flags().StringVarP(&streamName, "stream", "s", "", "Name of Redis stream to produce message to")
 	cmd.Flags().StringVarP(&group, "group", "g", "", "Name of consumer group")
 	cmd.Flags().StringVarP(&consumerName, "name", "n", "", "Name of consumer")
+	noAckFlag = cmd.Flags().Bool("no-ack", false, "Disable automatic acknowledgment of messages")
 
 	cmd.Execute()
 }

@@ -132,6 +132,26 @@ func TestRedisReadGroupStreams(t *testing.T) {
 	}
 }
 
+func TestAckLogValueEncodesMetadataAsJSON(t *testing.T) {
+	timestamp := time.Date(2026, 5, 11, 10, 8, 30, 123, time.UTC)
+
+	got, err := ackLogValue("consumer-1", timestamp)
+	if err != nil {
+		t.Fatalf("ackLogValue() error = %v", err)
+	}
+
+	var metadata map[string]string
+	if err := json.Unmarshal([]byte(got), &metadata); err != nil {
+		t.Fatalf("ackLogValue() returned invalid JSON %q: %v", got, err)
+	}
+	if metadata["consumer"] != "consumer-1" {
+		t.Fatalf("consumer = %q, want %q", metadata["consumer"], "consumer-1")
+	}
+	if metadata["timestamp"] != timestamp.Format(time.RFC3339Nano) {
+		t.Fatalf("timestamp = %q, want %q", metadata["timestamp"], timestamp.Format(time.RFC3339Nano))
+	}
+}
+
 func TestStreamMessageType(t *testing.T) {
 	tests := []struct {
 		name   string

@@ -149,9 +149,17 @@ func (r *RedisClient) ReadStreams(ctx context.Context, streams []string, group, 
 				Source:    streamMessageStringField(msg.Values, "source"),
 				Timestamp: streamMessageTimestamp(msg.Values),
 				Values:    msg.Values,
-				ackFunc: func(ctx context.Context, id string) error {
-					return r.Ack(ctx, streamName, group, id)
-				},
+				ackFunc:   buildAckFunc(r, streamName, group, consumerName),
+				// ackFunc: func(ctx context.Context, id string) error {
+				// 	if err := r.client.HSet(ctx, fmt.Sprintf("%s:acks", streamName), map[string]any{
+				// 		"event_id":  msg.ID,
+				// 		"consumer":  consumerName,
+				// 		"timestamp": time.Now().UTC().Format(time.RFC3339Nano),
+				// 	}).Err(); err != nil {
+				// 		return err
+				// 	}
+				// 	return r.Ack(ctx, streamName, group, id)
+				// },
 			})
 		}
 	}
@@ -175,6 +183,33 @@ func streamMessageTimestamp(values map[string]interface{}) time.Time {
 	}
 
 	return timestamp
+}
+
+func buildAckFunc(r *RedisClient, stream, group, consumerName string) func(ctx context.Context, id string) error {
+	return func(ctx context.Context, id string) error {
+		value, err := ackLogValue(consumerName, time.Now().UTC())
+		if err != nil {
+			return err
+		}
+
+		if err := r.client.HSet(ctx, fmt.Sprintf("%s:acks", stream), fmt.Sprintf("%s:%s", id, group), value).Err(); err != nil {
+			return err
+		}
+		return r.Ack(ctx, stream, group, id)
+
+	}
+}
+
+func ackLogValue(consumerName string, timestamp time.Time) (string, error) {
+	data, err := json.Marshal(map[string]string{
+		"consumer":  consumerName,
+		"timestamp": timestamp.Format(time.RFC3339Nano),
+	})
+	if err != nil {
+		return "", err
+	}
+
+	return string(data), nil
 }
 
 func streamMessageStringField(values map[string]interface{}, field string) string {

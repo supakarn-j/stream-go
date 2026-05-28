@@ -7,7 +7,7 @@ import (
 	"strings"
 
 	"github.com/spf13/cobra"
-	"gitlab.com/hannlync/backend/stream-go.git"
+	stream "github.com/supakarn-j/event-manager"
 )
 
 func main() {

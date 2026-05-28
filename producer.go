@@ -3,6 +3,7 @@ package stream
 import (
 	"context"
 	"errors"
+	"os"
 	"time"
 )
 
@@ -135,18 +136,30 @@ func (p *Producer) Push(ctx context.Context, message map[string]interface{}) err
 	return p.PushTo(ctx, p.streamName, message)
 }
 
-// PushTo writes a message to the named stream and adds an automatic timestamp field.
+// PushTo writes a message to the named stream and adds automatic timestamp and source fields.
 func (p *Producer) PushTo(ctx context.Context, stream string, message map[string]interface{}) error {
 	if stream == "" {
 		return ErrEmptyStreamName
 	}
 
-	event := make(map[string]interface{}, len(message)+1)
+	event := make(map[string]interface{}, len(message)+2)
 	for key, value := range message {
 		event[key] = value
+	}
+	if _, ok := event["source"]; !ok {
+		event["source"] = hostname()
 	}
 	event["timestamp"] = time.Now().UTC().Format(time.RFC3339Nano)
 
 	p.logger.Debugf("Pushing message to stream '%s': %v", stream, event)
 	return p.client.Push(ctx, stream, p.maxLen, event)
+}
+
+func hostname() string {
+	name, err := os.Hostname()
+	if err != nil {
+		return ""
+	}
+
+	return name
 }

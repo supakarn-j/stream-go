@@ -69,6 +69,46 @@ func TestProducerPushAddsTimestamp(t *testing.T) {
 	}
 }
 
+func TestProducerPushAddsSource(t *testing.T) {
+	client := &fakeClient{}
+	producer, err := NewProducer(ProducerConfig{Name: "test_stream"}, WithClient(client))
+	if err != nil {
+		t.Fatalf("NewProducer() error = %v", err)
+	}
+
+	message := map[string]interface{}{"field1": "value1"}
+	if err := producer.Push(context.Background(), message); err != nil {
+		t.Fatalf("Producer.Push() error = %v", err)
+	}
+
+	want, err := os.Hostname()
+	if err != nil {
+		want = ""
+	}
+	if client.pushMessage["source"] != want {
+		t.Fatalf("source = %v, want %q", client.pushMessage["source"], want)
+	}
+	if _, ok := message["source"]; ok {
+		t.Fatal("Producer.Push() mutated caller message with source")
+	}
+}
+
+func TestProducerPushKeepsUserDefinedSource(t *testing.T) {
+	client := &fakeClient{}
+	producer, err := NewProducer(ProducerConfig{Name: "test_stream"}, WithClient(client))
+	if err != nil {
+		t.Fatalf("NewProducer() error = %v", err)
+	}
+
+	if err := producer.Push(context.Background(), map[string]interface{}{"source": "api-gateway"}); err != nil {
+		t.Fatalf("Producer.Push() error = %v", err)
+	}
+
+	if client.pushMessage["source"] != "api-gateway" {
+		t.Fatalf("source = %v, want api-gateway", client.pushMessage["source"])
+	}
+}
+
 func TestProducerPushToUsesExplicitStream(t *testing.T) {
 	client := &fakeClient{}
 	producer, err := NewProducer(ProducerConfig{}, WithClient(client))
