@@ -12,7 +12,7 @@ It provides a small wrapper around Redis Streams with producer and consumer help
 ## Installation
 
 ```bash
-go get github.com/supakarn-j/event-manager@latest
+go get github.com/supakarn-j/stream-go@latest
 ```
 
 ## Quick Start
@@ -24,7 +24,7 @@ import (
 	"context"
 	"log"
 
-	stream "github.com/supakarn-j/event-manager"
+	stream "github.com/supakarn-j/stream-go"
 )
 
 func main() {
