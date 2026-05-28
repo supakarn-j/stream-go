@@ -1,4 +1,4 @@
-module github.com/supakarn-j/event-manager
+module github.com/supakarn-j/stream-go
 
 go 1.21
 
