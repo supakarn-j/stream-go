@@ -124,6 +124,29 @@ func TestNormalizeStreamValuesReturnsJSONError(t *testing.T) {
 	}
 }
 
+func TestPublishStatusMessageEncodesJSON(t *testing.T) {
+	got, err := publishStatusMessage(map[string]interface{}{
+		"name":    "consumer-1",
+		"group":   "group-1",
+		"status":  "up",
+		"streams": []string{"orders"},
+	})
+	if err != nil {
+		t.Fatalf("publishStatusMessage() error = %v", err)
+	}
+
+	var decoded map[string]interface{}
+	if err := json.Unmarshal([]byte(got), &decoded); err != nil {
+		t.Fatalf("publishStatusMessage() returned invalid JSON %q: %v", got, err)
+	}
+	if decoded["name"] != "consumer-1" {
+		t.Fatalf("name = %v, want consumer-1", decoded["name"])
+	}
+	if decoded["group"] != "group-1" {
+		t.Fatalf("group = %v, want group-1", decoded["group"])
+	}
+}
+
 func TestRedisReadGroupStreams(t *testing.T) {
 	got := redisReadGroupStreams([]string{"stream-a", "stream-b"})
 	want := []string{"stream-a", "stream-b", ">", ">"}

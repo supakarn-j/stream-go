@@ -12,7 +12,8 @@ import (
 )
 
 func main() {
-	var host, port, password, streamName, group, consumerName string
+	var host, port, password, group, consumerName string
+	var streamNames []string
 	var noAckFlag *bool
 
 	defer func() {
@@ -27,7 +28,7 @@ func main() {
 		Short: "consumer cli tool",
 		Long:  "consumer cli tool to read from Redis stream.",
 		Run: func(cmd *cobra.Command, args []string) {
-			if streamName == "" {
+			if streamNames == nil {
 				fmt.Println("Stream name is required. Use --stream or -s flag to specify the stream name.")
 				os.Exit(1)
 			}
@@ -38,7 +39,7 @@ func main() {
 
 			consumer, err := stream.NewConsumer(
 				stream.ConsumerConfig{
-					Streams: []string{streamName},
+					Streams: streamNames,
 					Group:   group,
 					Name:    consumerName,
 				},
@@ -69,7 +70,7 @@ func main() {
 	cmd.Flags().StringVarP(&host, "host", "H", "localhost", "Host of the Redis server")
 	cmd.Flags().StringVarP(&port, "port", "P", "6379", "Port of the Redis server")
 	cmd.Flags().StringVarP(&password, "password", "p", "", "Password for Redis server")
-	cmd.Flags().StringVarP(&streamName, "stream", "s", "", "Name of Redis stream to produce message to")
+	cmd.Flags().StringSliceVarP(&streamNames, "stream", "s", nil, "Name(s) of Redis stream(s) to consume messages from (comma-separated for multiple streams)")
 	cmd.Flags().StringVarP(&group, "group", "g", "", "Name of consumer group")
 	cmd.Flags().StringVarP(&consumerName, "name", "n", "", "Name of consumer")
 	noAckFlag = cmd.Flags().Bool("no-ack", false, "Disable automatic acknowledgment of messages")

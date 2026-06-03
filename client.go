@@ -16,6 +16,7 @@ type Client interface {
 	Push(ctx context.Context, stream string, maxLen int64, message map[string]interface{}) error
 	RegisterConsumer(ctx context.Context, stream, group, name string) error
 	ReadStreams(ctx context.Context, streams []string, group, consumerName string, count int64, retryIn time.Duration) ([]Message, error)
+	PublishStatus(ctx context.Context, channel string, message map[string]interface{}) error
 	Ack(ctx context.Context, stream, group string, ids ...string) error
 }
 
@@ -122,6 +123,28 @@ func (r *RedisClient) RegisterConsumer(ctx context.Context, stream, group, name 
 	return nil
 }
 
+func (r RedisClient) PublishStatus(ctx context.Context, channel string, message map[string]interface{}) error {
+	payload, err := publishStatusMessage(message)
+	if err != nil {
+		return err
+	}
+
+	return r.client.Publish(ctx, channel, payload).Err()
+}
+
+func publishStatusMessage(message map[string]any) (string, error) {
+	payload, err := json.Marshal(message)
+	if err != nil {
+		return "", err
+	}
+
+	return string(payload), nil
+}
+
+func (r RedisClient) SubscribeChannel(ctx context.Context) {
+
+}
+
 func (r *RedisClient) ReadStreams(ctx context.Context, streams []string, group, consumerName string, count int64, retryIn time.Duration) ([]Message, error) {
 	args := &redis.XReadGroupArgs{
 		Group:    group,
@@ -150,16 +173,6 @@ func (r *RedisClient) ReadStreams(ctx context.Context, streams []string, group, 
 				Timestamp: streamMessageTimestamp(msg.Values),
 				Values:    msg.Values,
 				ackFunc:   buildAckFunc(r, streamName, group, consumerName),
-				// ackFunc: func(ctx context.Context, id string) error {
-				// 	if err := r.client.HSet(ctx, fmt.Sprintf("%s:acks", streamName), map[string]any{
-				// 		"event_id":  msg.ID,
-				// 		"consumer":  consumerName,
-				// 		"timestamp": time.Now().UTC().Format(time.RFC3339Nano),
-				// 	}).Err(); err != nil {
-				// 		return err
-				// 	}
-				// 	return r.Ack(ctx, streamName, group, id)
-				// },
 			})
 		}
 	}
@@ -192,7 +205,7 @@ func buildAckFunc(r *RedisClient, stream, group, consumerName string) func(ctx c
 			return err
 		}
 
-		if err := r.client.HSet(ctx, fmt.Sprintf("%s:acks", stream), fmt.Sprintf("%s:%s", id, group), value).Err(); err != nil {
+		if err := r.client.HSet(ctx, fmt.Sprintf("acks:%s", stream), fmt.Sprintf("%s:%s", id, group), value).Err(); err != nil {
 			return err
 		}
 		return r.Ack(ctx, stream, group, id)

@@ -13,19 +13,24 @@ var (
 	ErrEmptyGroupName = errors.New("group name cannot be empty")
 )
 
-// DefaultConsumerRetryIn is the default delay before retrying pending messages.
-const DefaultConsumerRetryIn = time.Minute
+const (
+	// DefaultConsumerRetryIn is the default delay before retrying pending messages.
+	DefaultConsumerRetryIn = time.Minute
+	// DefaultConsumerHealthInterval is the default interval between consumer health publishes.
+	DefaultConsumerHealthInterval = 30 * time.Second
+)
 
 // Consumer reads messages from one or more Redis Streams in a consumer group.
 type Consumer struct {
-	client      Client
-	ownsClient  bool
-	redisConfig *RedisConfig
-	streams     []string
-	group       string
-	name        string
-	retryIn     time.Duration
-	logger      Logger
+	client         Client
+	ownsClient     bool
+	redisConfig    *RedisConfig
+	streams        []string
+	group          string
+	name           string
+	retryIn        time.Duration
+	healthInterval time.Duration
+	logger         Logger
 }
 
 // ConsumerConfig configures a Consumer.
@@ -109,10 +114,11 @@ func NewConsumer(conf ConsumerConfig, opts ...ConsumerOption) (*Consumer, error)
 	}
 
 	c := &Consumer{
-		streams: conf.streams(),
-		group:   conf.Group,
-		name:    conf.Name,
-		retryIn: retryIn,
+		streams:        conf.streams(),
+		group:          conf.Group,
+		name:           conf.Name,
+		retryIn:        retryIn,
+		healthInterval: DefaultConsumerHealthInterval,
 	}
 
 	for _, opt := range opts {
@@ -204,5 +210,37 @@ func (c *Consumer) StartWithErrors(ctx context.Context, msgCount int64) (<-chan 
 		}
 	}()
 
+	go c.publishConsumerHeartBeat(ctx)
+
 	return out, errs
+}
+
+func (c *Consumer) publishConsumerHeartBeat(ctx context.Context) {
+	c.publishConsumerHealth(ctx)
+
+	ticker := time.NewTicker(c.healthInterval)
+	defer ticker.Stop()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			c.publishConsumerHealth(ctx)
+		}
+	}
+}
+
+func (c *Consumer) publishConsumerHealth(ctx context.Context) {
+	message := map[string]any{
+		"name":     c.name,
+		"group":    c.group,
+		"status":   "up",
+		"streams":  c.streams,
+		"lastSeen": time.Now().UTC().Format(time.RFC3339),
+		"ip":       getLocalIP(),
+	}
+	if err := c.client.PublishStatus(ctx, "consumer:status", message); err != nil {
+		c.logger.Errorf("Failed to publish consumer status: %v", err)
+	}
 }

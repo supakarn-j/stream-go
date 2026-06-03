@@ -232,6 +232,41 @@ func TestConsumerStartWithErrorsReadsMultipleStreams(t *testing.T) {
 	}
 }
 
+func TestConsumerStartWithErrorsPublishesHealthImmediatelyAndOnInterval(t *testing.T) {
+	client := &fakeClient{readErr: errors.New("stop")}
+	consumer, err := NewConsumer(ConsumerConfig{
+		Streams: []string{"stream"},
+		Group:   "group",
+		Name:    "consumer",
+	}, WithClient(client))
+	if err != nil {
+		t.Fatalf("NewConsumer() error = %v", err)
+	}
+	consumer.healthInterval = 10 * time.Millisecond
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	_, errs := consumer.StartWithErrors(ctx, 1)
+	<-errs
+
+	if !client.waitForPublishCount(1, time.Second) {
+		t.Fatalf("PublishStatus calls = %d, want at least 1", client.publishCount())
+	}
+
+	channel, message := client.publishedStatus()
+	if channel != "consumer:status" {
+		t.Fatalf("PublishStatus channel = %q, want consumer:status", channel)
+	}
+	if message["name"] != "consumer" {
+		t.Fatalf("PublishStatus name = %v, want consumer", message["name"])
+	}
+
+	if !client.waitForPublishCount(2, time.Second) {
+		t.Fatalf("PublishStatus calls = %d, want at least 2", client.publishCount())
+	}
+}
+
 func TestMessageAckReturnsError(t *testing.T) {
 	wantErr := errors.New("ack failed")
 	message := Message{

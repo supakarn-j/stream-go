@@ -2,10 +2,12 @@ package stream
 
 import (
 	"context"
+	"sync"
 	"time"
 )
 
 type fakeClient struct {
+	mu     sync.Mutex
 	closed bool
 
 	pushStream  string
@@ -32,6 +34,11 @@ type fakeClient struct {
 	ackGroup  string
 	ackIDs    []string
 	ackErr    error
+
+	publishChannel string
+	publishMessage map[string]interface{}
+	publishCalls   int
+	publishErr     error
 }
 
 type fakeLogger struct {
@@ -95,4 +102,40 @@ func (f *fakeClient) Ack(ctx context.Context, stream, group string, ids ...strin
 	f.ackGroup = group
 	f.ackIDs = append([]string(nil), ids...)
 	return f.ackErr
+}
+
+func (f *fakeClient) PublishStatus(ctx context.Context, channel string, message map[string]interface{}) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	f.publishChannel = channel
+	f.publishMessage = message
+	f.publishCalls++
+	return f.publishErr
+}
+
+func (f *fakeClient) publishCount() int {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return f.publishCalls
+}
+
+func (f *fakeClient) publishedStatus() (string, map[string]interface{}) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+
+	return f.publishChannel, f.publishMessage
+}
+
+func (f *fakeClient) waitForPublishCount(want int, timeout time.Duration) bool {
+	deadline := time.Now().Add(timeout)
+	for time.Now().Before(deadline) {
+		if f.publishCount() >= want {
+			return true
+		}
+		time.Sleep(time.Millisecond)
+	}
+
+	return f.publishCount() >= want
 }
